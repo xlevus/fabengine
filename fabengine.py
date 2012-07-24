@@ -122,7 +122,6 @@ class DevAppserver(Task):
             args.append('-p %s' % port)
 
         args.append('.')
-        print CONFIG
         local(" ".join(args))
 
 
