@@ -16,7 +16,7 @@ Usage
 
  3. Configure fabengine paths.
 
-        fabengine.config(root=os.path.join(os.path.dirname(__file__),'..'))
+        fabengine.config(root=os.path.join(os.path.dirname(__file__),'my_project'))
 
     `fabengine.config` takes three arguments:
 

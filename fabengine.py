@@ -121,7 +121,7 @@ class DevAppserver(Task):
         if port:
             args.append('-p %s' % port)
 
-        args.append('.')
+        args.append(CONFIG['ROOT'])
         local(" ".join(args))
 
 
