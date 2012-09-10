@@ -78,6 +78,8 @@ class BundlePackages(Task):
                     func = func % 'z'
                 elif ext in ('.bz2',):
                     func = func % 'j'
+                elif ext in ('.zip',):
+                    func = 'unzip %s' % f
                 else:
                     continue
                 local(func)
@@ -93,14 +95,20 @@ class BundlePackages(Task):
                     rmtree(f)
 
 
-    def run(self, requirements='requirements.txt', dest='packages'):
+    def run(self, requirements='requirements.txt', dest='packages',
+            archive=True, package=''):
+
         self.package_dir = os.path.join(CONFIG['ROOT'], dest)
         if not os.path.exists(self.package_dir):
             os.mkdir(self.package_dir)
-        local("pip install --no-install -d %s -r %s" % (dest, requirements))
+        if package:
+            local("pip install --no-install -d %s %s" % (dest, package))
+        else:
+            local("pip install --no-install -d %s -r %s" % (dest, requirements))
 
         self.extract_folders()
-        self.zip_packages()
+        if archive in (True, 'true','True'):
+            self.zip_packages()
 
 
 class DevAppserver(Task):
