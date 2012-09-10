@@ -16,6 +16,8 @@ def find_appengine():
         path = os.path.realpath(path)
     return os.path.dirname(path)
 
+TRUE = ('true','t','y','1')
+
 CONFIG = {}
 
 GAE_CUSTOMISE = """
@@ -94,21 +96,36 @@ class BundlePackages(Task):
                         local("zip -r -0 %s.zip . -i \*" % f)
                     rmtree(f)
 
+    def run_fixes(self):
+        with lcd(self.package_dir):
+            for f in os.listdir(self.package_dir):
+                name = f.split('-')[0]
+                fix_func = getattr(self, 'fix_%s' % name, None)
+                if fix_func:
+                    print "Fixing package %r" % f
+                    fix_func(f)
 
     def run(self, requirements='requirements.txt', dest='packages',
-            archive=True, package=''):
+            archive='True'):
 
         self.package_dir = os.path.join(CONFIG['ROOT'], dest)
         if not os.path.exists(self.package_dir):
             os.mkdir(self.package_dir)
-        if package:
-            local("pip install --no-install -d %s %s" % (dest, package))
-        else:
-            local("pip install --no-install -d %s -r %s" % (dest, requirements))
+
+        local("pip install --no-install -d %s -r %s" % (dest, requirements))
 
         self.extract_folders()
-        if archive in (True, 'true','True'):
+
+        self.run_fixes()
+
+        if archive.lower() in TRUE:
             self.zip_packages()
+
+
+    def fix_httplib2(self, folder):
+        local('mv %s/python2 %s_x' % (folder, folder))
+        local('rm -rf %s' % folder)
+        local('mv %s_x %s' % (folder, folder))
 
 
 class DevAppserver(Task):
@@ -120,7 +137,10 @@ class DevAppserver(Task):
     """
     name = 'dev_appserver'
 
-    def run(self, host=None, port=None, **kwargs):
+    def run(self, host=None, port=None, kill='False', **kwargs):
+        if kill.lower() in TRUE:
+            local("ps ax|grep 'appengine/dev_appserver.py'|grep -v grep|awk {'print $1'}|xargs kill -9")
+
         args = [CONFIG['DEV_APPSERVER']]
         args += ['--'+k for k in kwargs.keys()]
 
