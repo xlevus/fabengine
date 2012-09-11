@@ -61,13 +61,16 @@ class BundlePackages(Task):
     Packages can then be loaded with the following snippet:
 
         import sys, os
-
         package_dir = "packages"
         package_dir_path = os.path.join(os.path.dirname(__file__), package_dir)
 
         for filename in os.listdir(package_dir_path):
-        sys.path.insert(0, "%s/%s" % (package_dir_path, filename))
-
+            if filename.endswith('.pth'):
+                pth_file = os.path.join(package_dir_path, filename)
+                with open(pth_file, 'r') as f:
+                    package_path = os.path.join(package_dir_path, f.read().strip())
+                    sys.path.insert(0, package_path)
+        sys.path.insert(0, package_dir_path)
     """
     name= 'bundle_packages'
 
