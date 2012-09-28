@@ -1,7 +1,8 @@
 import os
+import tempfile
 from shutil import rmtree
 
-from fabric.api import lcd, local, settings, hide
+from fabric.api import local, settings, hide
 from fabric.tasks import Task
 
 __all__ = ['bundle_packages', 'dev_appserver','test','show_config',
@@ -60,72 +61,71 @@ class BundlePackages(Task):
     Packages can then be loaded with the following snippet:
 
         import sys, os
-
         package_dir = "packages"
         package_dir_path = os.path.join(os.path.dirname(__file__), package_dir)
 
         for filename in os.listdir(package_dir_path):
-        sys.path.insert(0, "%s/%s" % (package_dir_path, filename))
-
+            if filename.endswith('.pth'):
+                pth_file = os.path.join(package_dir_path, filename)
+                with open(pth_file, 'r') as f:
+                    package_path = os.path.join(package_dir_path, f.read().strip())
+                    sys.path.insert(0, package_path)
+        sys.path.insert(0, package_dir_path)
     """
     name= 'bundle_packages'
 
-    def extract_folders(self):
-        with lcd(self.package_dir):
-            for f in os.listdir(self.package_dir):
-                f = os.path.join(self.package_dir, f)
-                func = 'tar x%%sf %s' %f
-                name, ext = os.path.splitext(f)
-                if ext in ('.gz','.tgz'):
-                    func = func % 'z'
-                elif ext in ('.bz2',):
-                    func = func % 'j'
-                elif ext in ('.zip',):
-                    func = 'unzip %s' % f
-                else:
-                    continue
-                local(func)
-                local('rm %s' % f)
-
     def zip_packages(self):
-        with lcd(self.package_dir):
-            for f in os.listdir(self.package_dir):
-                f = os.path.join(self.package_dir, f)
-                if os.path.isdir(f):
-                    with lcd(f):
-                        local("zip -r -0 %s.zip . -i \*" % f)
-                    rmtree(f)
+        unzipped = False
+        pkgs = local("pip zip -l --path=%s" % self.temp_dir, capture=True)
 
-    def run_fixes(self):
-        with lcd(self.package_dir):
-            for f in os.listdir(self.package_dir):
-                name = f.split('-')[0]
-                fix_func = getattr(self, 'fix_%s' % name, None)
-                if fix_func:
-                    print "Fixing package %r" % f
-                    fix_func(f)
+        for ln in pkgs.splitlines():
+            ln = ln.strip()
+
+            if ln.startswith("Unzipped"):
+                unzipped = True
+                continue
+
+            # Skip through all lines until we get to Unzipped section
+            if not unzipped:
+                continue
+
+            package, discards = ln.split(" ", 1)
+
+            local("pip zip --no-pyc --path=%s %s" % (self.temp_dir, package))
+
+    def fix_pth_paths(self):
+        # Our .pth files were pointing to /tmp/xyz. fix them to be relative.
+        for filename in os.listdir(self.package_dir):
+            if filename.endswith('.pth'):
+                with open(os.path.join(self.package_dir, filename), 'r+') as f:
+                    contents = f.read()
+                    f.seek(0)
+                    f.truncate()
+                    f.write(contents.replace(self.temp_dir, '.'))
 
     def run(self, requirements='requirements.txt', dest='packages',
             archive='True'):
 
-        self.package_dir = os.path.join(CONFIG['ROOT'], dest)
-        if not os.path.exists(self.package_dir):
-            os.mkdir(self.package_dir)
+        temp = tempfile.mkdtemp(prefix="fabengine")
+        try:
+            self.temp_dir = os.path.join(temp, 'lib/python2.7/site-packages')
+            self.package_dir = os.path.join(CONFIG['ROOT'], dest)
 
-        local("pip install --no-install -d %s -r %s" % (dest, requirements))
+            # fix pythonpath for --prefix install option
+            os.environ['PYTHONPATH'] = self.temp_dir
 
-        self.extract_folders()
+            local("""pip install --upgrade --install-option="--prefix=%s" -r %s""" % (
+                temp, requirements))
 
-        self.run_fixes()
+            if archive.lower() in TRUE:
+                self.zip_packages()
 
-        if archive.lower() in TRUE:
-            self.zip_packages()
+            local("mv %s %s" % (self.temp_dir, self.package_dir))
 
-
-    def fix_httplib2(self, folder):
-        local('mv %s/python2 %s_x' % (folder, folder))
-        local('rm -rf %s' % folder)
-        local('mv %s_x %s' % (folder, folder))
+            self.fix_pth_paths()
+        finally:
+            print "Cleaning up temp dir '%s'" % temp
+            rmtree(temp)
 
 
 class DevAppserver(Task):
