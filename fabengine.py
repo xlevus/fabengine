@@ -114,7 +114,7 @@ class BundlePackages(Task):
             # fix pythonpath for --prefix install option
             os.environ['PYTHONPATH'] = self.temp_dir
 
-            local("""pip install --upgrade --install-option="--prefix=%s" -r %s""" % (
+            local("""pip install -U -I --install-option="--prefix=%s" -r %s""" % (
                 temp, requirements))
 
             if archive.lower() in TRUE:
