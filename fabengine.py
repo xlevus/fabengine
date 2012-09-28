@@ -228,7 +228,7 @@ class AppCFGTask(Task):
         return cmd_args
 
     def run(self, *args, **kwargs):
-        local(" ". self.get_cmd(*args, **kwargs))
+        local(" ".join(self.get_cmd(*args, **kwargs)))
 
 class Update(AppCFGTask):
     """Upload code to appengine"""
