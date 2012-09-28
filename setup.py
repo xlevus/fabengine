@@ -7,7 +7,7 @@ def read(fname):
      return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 setup(name='fabengine',
-     version='0.2',
+     version='0.3',
      description='Fabric commands for appengine.',
      long_descriotion=read('README.md'),
      author='Chris Targett',
