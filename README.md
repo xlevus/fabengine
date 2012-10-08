@@ -108,12 +108,6 @@ Additional Commands
  * **fix_virtualenv_paths** - Applies some permanent path manipulation to the current virtualenv
    to fix loading of libraries bundled with the appengine sdk.
 
- * **update**, **update_indexes**, **update_queues**, **vacuum_indexes**, **update_dos**, 
-   **update_cron** - Aliases for appcfg.py commands. Arguments passed in are forwarded to appcfg.py.
-   e.g.:
-
-        fab fabengine.update:version=FOO,R --> appcfg.py update --version=FOO -R
-
 TODO
 ----
 
