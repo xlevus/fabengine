@@ -2,7 +2,7 @@ import os
 import tempfile
 from shutil import rmtree
 
-from fabric.api import local, settings, hide
+from fabric.api import local, settings, hide, lcd
 from fabric.tasks import Task
 
 __all__ = ['bundle_packages', 'dev_appserver','test','show_config',
@@ -43,15 +43,48 @@ def config(root, gae_path=None, dev_appserver=None, appcfg=None):
             CONFIG['GAE_PATH'], 'dev_appserver.py')
     CONFIG['APPCFG'] = appcfg or os.path.join(CONFIG['GAE_PATH'], 'appcfg.py')
 
-class ShowConfig(Task):
+
+def construct_cmd_params(*args, **kwargs):
+    joiner = kwargs.pop('_joiner','=')
+
+    params = []
+    params += ['--'+a for a in args]
+    params += ['--%s%s%s' % (k,joiner,v) for k,v in kwargs.iteritems()]
+    return params
+
+
+class FabengineTask(Task):
+    def __init__(self, *args, **kwargs):
+        self.default_arguments = ([],{})
+        super(FabengineTask, self).__init__(*args, **kwargs)
+
+    def set_default_args(self, *args, **kwargs):
+        self.default_arguments[0].extend(args)
+        self.default_arguments[1].update(kwargs)
+
+    def run(self, *n_args, **n_kwargs):
+        with lcd(CONFIG['ROOT']):
+            args = set(self.default_arguments[0])
+            args.union(n_args)
+
+            kwargs = self.default_arguments[1].copy()
+            kwargs.update(n_kwargs)
+            return self.run_fabengine(*list(args), **kwargs)
+
+    def run_fabengine(self):
+        raise NotImplementedError
+
+
+class ShowConfig(FabengineTask):
     """Shows Fabengine's config"""
     name = 'show_config'
 
-    def run(self):
+    def fabengine_run(self):
         for x in CONFIG.iteritems():
             print "%s: %s" % x
 
-class BundlePackages(Task):
+
+class BundlePackages(FabengineTask):
     """
     Bundles packages in requirements.txt into zipimport compatible archives.
 
@@ -103,7 +136,7 @@ class BundlePackages(Task):
                     f.truncate()
                     f.write(contents.replace(self.temp_dir, '.'))
 
-    def run(self, requirements='requirements.txt', dest='packages',
+    def run_fabengine(self, requirements='requirements.txt', dest='packages',
             archive='True'):
 
         temp = tempfile.mkdtemp(prefix="fabengine")
@@ -128,32 +161,21 @@ class BundlePackages(Task):
             rmtree(temp)
 
 
-class DevAppserver(Task):
+class DevAppserver(FabengineTask):
     """
-    Runs the development appserver.
-
-    First two arguments are host and port. Any keyword arguments are forwarded
-    to dev_appserver.py.
+    Runs the development appserver. Positional arguments are forwarded as
+    flags. Keyword arguments are forwarded as
     """
     name = 'dev_appserver'
 
-    def run(self, host=None, port=None, kill='False', **kwargs):
-        if kill.lower() in TRUE:
-            local("ps ax|grep 'appengine/dev_appserver.py'|grep -v grep|awk {'print $1'}|xargs kill -9")
-
+    def run_fabengine(self, *args, **kwargs):
         args = [CONFIG['DEV_APPSERVER']]
-        args += ['--'+k for k in kwargs.keys()]
-
-        if host:
-            args.append('-a %s' % host)
-        if port:
-            args.append('-p %s' % port)
-
+        args.extend(construct_cmd_params(*args, **kwargs))
         args.append(CONFIG['ROOT'])
         local(" ".join(args))
 
 
-class Test(Task):
+class Test(FabengineTask):
     """
     Run Nosetests.
 
@@ -165,26 +187,25 @@ class Test(Task):
     """
     name = 'test'
 
-    def run(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
+        super(Test, self).__init__(*args, **kwargs)
+        self.set_default_args('without-sandbox')
+
+    def run_fabengine(self, *args, **kwargs):
         cmd = ['nosetests', '--with-gae',
             '--gae-lib-root=%s' % CONFIG['GAE_PATH']]
 
-        if not kwargs.get('with-sandbox'):
-            cmd.append('--without-sandbox')
-        else:
-            del kwargs['with-sandbox']
+        module = kwargs.pop("MODULE",'')
 
-        for k,v in kwargs.iteritems():
-            if k.startswith('--'):
-                cmd.append("%s=%s" % (k,v))
-
-        cmd.extend(args)
+        cmd.extend(construct_cmd_params(*args, **kwargs))
+        cmd.append(module)
 
         with settings(warn_only=True):
             with hide('warnings'):
                 local(" ".join(cmd))
 
-class FixVirtualenvPaths(Task):
+
+class FixVirtualenvPaths(FabengineTask):
     """
     Applies some permanent path manipulation to make the virtualenv use appengine's paths.
 
@@ -193,7 +214,7 @@ class FixVirtualenvPaths(Task):
     """
     name = 'fix_virtualenv_paths'
 
-    def run(self):
+    def run_fabengine(self):
         import sys
 
         env = os.environ.get('VIRTUAL_ENV')
@@ -211,48 +232,50 @@ class FixVirtualenvPaths(Task):
             gaepth.write("\nimport gaecustomise; gaecustomise.fix_sys_path()")
 
 
-class AppCFGTask(Task):
+class AppCFGTask(FabengineTask):
     """Base task for appcfg.py commands."""
 
     name = None
 
     def get_cmd(self, *args, **kwargs):
         cmd_args = [CONFIG['APPCFG'], self.name, CONFIG['ROOT']]
-
-        for a in args:
-            cmd_args.append("-%s" % a)
-
-        for k,v in kwargs.iteritems():
-            cmd_args.append("--%s=%s")
+        cmd_args.extend(construct_cmd_params(*args, **kwargs))
 
         return cmd_args
 
-    def run(self, *args, **kwargs):
+    def run_fabengine(self, *args, **kwargs):
         local(" ".join(self.get_cmd(*args, **kwargs)))
+
 
 class Update(AppCFGTask):
     """Upload code to appengine"""
     name = 'update'
 
+
 class UpdateIndexes(AppCFGTask):
     """Update appengine indexes"""
     name = 'update_indexes'
+
 
 class UpdateQueues(AppCFGTask):
     """Update appengine queues"""
     name = 'update_queues'
 
+
 class VacuumIndexes(AppCFGTask):
     """Delete unused appengine indexes"""
     name = 'vacuum_indexes'
+
 
 class UpdateDoS(AppCFGTask):
     """Update appengine DoS protection"""
     name = 'update_dos'
 
+
 class UpdateCron(AppCFGTask):
     """Update appengine cron jobs"""
     name = 'update_cron'
+
 
 show_config = ShowConfig()
 bundle_packages = BundlePackages()
