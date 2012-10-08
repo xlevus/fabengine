@@ -65,7 +65,7 @@ class FabengineTask(Task):
     def run(self, *n_args, **n_kwargs):
         with lcd(CONFIG['ROOT']):
             args = set(self.default_arguments[0])
-            args.union(n_args)
+            args.update(n_args)
 
             kwargs = self.default_arguments[1].copy()
             kwargs.update(n_kwargs)
