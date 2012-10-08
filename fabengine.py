@@ -169,10 +169,10 @@ class DevAppserver(FabengineTask):
     name = 'dev_appserver'
 
     def run_fabengine(self, *args, **kwargs):
-        args = [CONFIG['DEV_APPSERVER']]
-        args.extend(construct_cmd_params(*args, **kwargs))
-        args.append(CONFIG['ROOT'])
-        local(" ".join(args))
+        cmd = [CONFIG['DEV_APPSERVER']]
+        cmd.extend(construct_cmd_params(*args, **kwargs))
+        cmd.append(CONFIG['ROOT'])
+        local(" ".join(cmd))
 
 
 class Test(FabengineTask):
