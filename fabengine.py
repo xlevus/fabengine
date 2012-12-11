@@ -107,55 +107,39 @@ class BundlePackages(FabengineTask):
     """
     name= 'bundle_packages'
 
-    def zip_packages(self):
-        unzipped = False
-        pkgs = local("pip zip -l --path=%s" % self.temp_dir, capture=True)
-
-        for ln in pkgs.splitlines():
-            ln = ln.strip()
-
-            if ln.startswith("Unzipped"):
-                unzipped = True
-                continue
-
-            # Skip through all lines until we get to Unzipped section
-            if not unzipped:
-                continue
-
-            package, discards = ln.split(" ", 1)
-
-            local("pip zip --no-pyc --path=%s %s" % (self.temp_dir, package))
-
-    def fix_pth_paths(self):
-        # Our .pth files were pointing to /tmp/xyz. fix them to be relative.
-        for filename in os.listdir(self.package_dir):
-            if filename.endswith('.pth'):
-                with open(os.path.join(self.package_dir, filename), 'r+') as f:
-                    contents = f.read()
-                    f.seek(0)
-                    f.truncate()
-                    f.write(contents.replace(self.temp_dir, '.'))
-
     def run_fabengine(self, requirements='requirements.txt', dest='packages',
             archive='True'):
+
+        BUNDLE = 'BUNDLE.zip'
 
         temp = tempfile.mkdtemp(prefix="fabengine")
         try:
             self.temp_dir = os.path.join(temp, 'lib/python2.7/site-packages')
             self.package_dir = os.path.join(CONFIG['ROOT'], dest)
 
-            # fix pythonpath for --prefix install option
-            os.environ['PYTHONPATH'] = self.temp_dir
 
-            local("""pip install -U -I --install-option="--prefix=%s" -r %s""" % (
-                temp, requirements))
+            local("""pip bundle %(bundle)s -r %(requirements)s""" % {
+                'bundle':os.path.join(temp, BUNDLE),
+                'requirements': requirements,
+            })
 
-            if archive.lower() in TRUE:
-                self.zip_packages()
+            with lcd(temp):
+                local("unzip %s" % BUNDLE)
 
-            local("mv %s %s" % (self.temp_dir, self.package_dir))
+                # Fix extracted dir permissions
+                local("find -type d -exec chmod +x {} \;")
 
-            self.fix_pth_paths()
+                zip_root = os.path.join(temp, 'build')
+                for pkg_name in os.listdir(zip_root):
+                    pkg_path = os.path.join(zip_root, pkg_name)
+                    if not os.path.isdir(pkg_path):
+                        continue
+
+                    with lcd(pkg_path):
+                        print "Zipping %s" % pkg_path
+                        local('zip -r0 %s .' % (
+                            os.path.join(self.package_dir, pkg_name+'.zip'),
+                        ))
         finally:
             print "Cleaning up temp dir '%s'" % temp
             rmtree(temp)
