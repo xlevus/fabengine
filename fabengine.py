@@ -127,7 +127,7 @@ class BundlePackages(FabengineTask):
                 local("unzip %s" % BUNDLE)
 
                 # Fix extracted dir permissions
-                local("find -type d -exec chmod +x {} \;")
+                local("find . -type d -exec chmod +x {} \;")
 
                 zip_root = os.path.join(temp, 'build')
                 for pkg_name in os.listdir(zip_root):
