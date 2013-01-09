@@ -18,6 +18,7 @@ def find_appengine():
     return os.path.dirname(path)
 
 TRUE = ('true','t','y','1')
+ISTRUE = lambda x: str(x).lower() in TRUE
 
 CONFIG = {}
 
@@ -110,36 +111,29 @@ class BundlePackages(FabengineTask):
     def run_fabengine(self, requirements='requirements.txt', dest='packages',
             archive='True'):
 
-        BUNDLE = 'BUNDLE.zip'
-
         temp = tempfile.mkdtemp(prefix="fabengine")
         try:
-            self.temp_dir = os.path.join(temp, 'lib/python2.7/site-packages')
             self.package_dir = os.path.join(CONFIG['ROOT'], dest)
+            if not os.path.exists(self.package_dir):
+                os.makedirs(self.package_dir)
 
+            args = [
+                "pip",
+                "install",
+                "-I",
+                """--install-option="--install-lib=%s" """ % temp,
+                "-r %s" % requirements,
+            ]
 
-            local("""pip bundle %(bundle)s -r %(requirements)s""" % {
-                'bundle':os.path.join(temp, BUNDLE),
-                'requirements': requirements,
-            })
+            local(" ".join(args))
 
             with lcd(temp):
-                local("unzip %s" % BUNDLE)
+                if ISTRUE(archive):
+                    local("zip -r0 %s ." % os.path.join(
+                        self.package_dir,"fabengine_bundle.zip"))
+                else:
+                    local("cp -a * %s" % self.package_dir)
 
-                # Fix extracted dir permissions
-                local("find . -type d -exec chmod +x {} \;")
-
-                zip_root = os.path.join(temp, 'build')
-                for pkg_name in os.listdir(zip_root):
-                    pkg_path = os.path.join(zip_root, pkg_name)
-                    if not os.path.isdir(pkg_path):
-                        continue
-
-                    with lcd(pkg_path):
-                        print "Zipping %s" % pkg_path
-                        local('zip -r0 %s .' % (
-                            os.path.join(self.package_dir, pkg_name+'.zip'),
-                        ))
         finally:
             print "Cleaning up temp dir '%s'" % temp
             rmtree(temp)
