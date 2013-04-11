@@ -41,7 +41,7 @@ def config(root, gae_path=None, dev_appserver=None, appcfg=None):
     CONFIG['ROOT'] = os.path.abspath(root)
     CONFIG['GAE_PATH'] = gae_path or find_appengine()
     CONFIG['DEV_APPSERVER'] = dev_appserver or os.path.join(
-            CONFIG['GAE_PATH'], 'dev_appserver.py')
+            CONFIG['GAE_PATH'], 'old_dev_appserver.py')
     CONFIG['APPCFG'] = appcfg or os.path.join(CONFIG['GAE_PATH'], 'appcfg.py')
 
 
