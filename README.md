@@ -108,6 +108,27 @@ Additional Commands
  * **fix_virtualenv_paths** - Applies some permanent path manipulation to the current virtualenv
    to fix loading of libraries bundled with the appengine sdk.
 
+
+Parameters to deploy Cobra 2 applications
+-----------------------------------------
+
+fab fabengine.bundle_packages:cobra2_repository=<repository_url>,cobra2_branch=<branch_name>,cobra2_egg_name=cobra2
+
+The repository url has to be in the form::
+
+    git+ssh://git@github.com/iwi-games/py-cobra2.git
+
+and ssh key has to be present in order to download the repository.
+
+The branch name::
+    
+    cobra2_branch=<branch_name>
+
+is the branch you want to use (default: master)
+
+
+
+
 TODO
 ----
 

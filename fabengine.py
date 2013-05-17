@@ -1,8 +1,10 @@
 import os
+import re
 import tempfile
 from shutil import rmtree
 
 from fabric.api import local, settings, hide, lcd
+from fabric.contrib.files import exists
 from fabric.tasks import Task
 
 __all__ = ['bundle_packages', 'dev_appserver','test','show_config',
@@ -19,6 +21,7 @@ def find_appengine():
 
 TRUE = ('true','t','y','1')
 ISTRUE = lambda x: str(x).lower() in TRUE
+COBRA2_EGG_NAME = 'cobra2'
 
 CONFIG = {}
 
@@ -52,6 +55,93 @@ def construct_cmd_params(*args, **kwargs):
     params += ['--'+a for a in args]
     params += ['--%s%s%s' % (k,joiner,v) for k,v in kwargs.iteritems()]
     return params
+
+
+def handle_cobra_repository(cobra2_repository, cobra2_branch):
+    """
+
+    :param cobra2_repository: cobra2 repo in the form:
+    :param cobra2_branch: the branch name
+    """
+    lib_dir = os.path.join(os.getcwd(), 'lib')
+    if not os.path.exists(lib_dir):
+        local('mkdir %s' % lib_dir)
+
+    with lcd(lib_dir):
+        target_folder = os.path.join(lib_dir, COBRA2_EGG_NAME)
+        if os.path.exists(target_folder):
+            rmtree(target_folder)
+
+        clone_command = 'git clone %s %s' % (cobra2_repository, COBRA2_EGG_NAME)
+        local(clone_command)
+
+        with lcd(target_folder):
+            checkout_command = 'git checkout %s' % cobra2_branch
+            local(checkout_command)
+            return target_folder
+
+
+def handle_requirements(temp_folder, requirements):
+    """
+    This method handlers the application requirements AFTER the ones loaded from Cobra 2.
+    **Assumes that the package folder already exists**
+
+    :param temp_folder: the temporary folder that fabengine created to build dependencies
+    :param requirements: the name of the requirements file
+    
+    """
+
+
+    args = [
+        "pip",
+        "install",
+        "-I",
+        """--install-option="--install-lib=%s" """ % temp_folder,
+        "-r %s" % requirements,
+    ]
+
+    local(" ".join(args))
+    
+
+
+def handle_cobra_requirements(temp_folder, cobra2_location):
+    """
+    """
+    requirements = os.path.join(cobra2_location, 'requirements.txt')
+    try:
+        args = [
+            "pip",
+            "install",
+            "-I",
+            """--install-option="--install-lib=%s" """ % temp_folder,
+            "-r %s" % requirements,
+        ]
+
+        local(" ".join(args))
+        return True
+
+    except:
+        print "Unable to handle Cobra 2 requirements"
+        return False
+
+
+def create_package(temp_folder, archive, package_dir):
+    """
+    """
+    with lcd(temp_folder):
+        if ISTRUE(archive):
+            local("zip -r0 %s . " % os.path.join(package_dir,"fabengine_bundle.zip"))
+        else:
+            local("cp -a * %s" % package_dir)
+
+    print "Package created."
+
+
+def handle_iwiacl(temp_folder):
+    # This has to be wrapped in a function, too.
+    local("git clone git@github.com:iwi-games/py-iwiacl.git %s/iwiacl_tmp" % temp_folder)
+    local("mv %s/iwiacl_tmp/iwiacl %s/" % (temp_folder, temp_folder))
+    local("rm -rf %s/iwiacl_tmp" % temp_folder)
 
 
 class FabengineTask(Task):
@@ -108,35 +198,24 @@ class BundlePackages(FabengineTask):
     """
     name= 'bundle_packages'
 
-    def run_fabengine(self, requirements='requirements.txt', dest='packages',
+    def run_fabengine(self, cobra2_repository, cobra2_branch='master', requirements='requirements.txt', dest='packages',
             archive='True'):
 
-        temp = tempfile.mkdtemp(prefix="fabengine")
-        try:
-            self.package_dir = os.path.join(CONFIG['ROOT'], dest)
-            if not os.path.exists(self.package_dir):
-                os.makedirs(self.package_dir)
+        assert cobra2_repository
+        assert cobra2_branch
 
-            args = [
-                "pip",
-                "install",
-                "-I",
-                """--install-option="--install-lib=%s" """ % temp,
-                "-r %s" % requirements,
-            ]
+        package_dir = os.path.join(CONFIG['ROOT'], dest)
+        temp_folder = tempfile.mkdtemp(prefix="fabengine")
 
-            local(" ".join(args))
+        if not os.path.exists(package_dir):
+            os.makedirs(package_dir)
 
-            with lcd(temp):
-                if ISTRUE(archive):
-                    local("zip -r0 %s ." % os.path.join(
-                        self.package_dir,"fabengine_bundle.zip"))
-                else:
-                    local("cp -a * %s" % self.package_dir)
+        cobra2_location = handle_cobra_repository(cobra2_repository, cobra2_branch)
+        handle_cobra_requirements(temp_folder, cobra2_location)
 
-        finally:
-            print "Cleaning up temp dir '%s'" % temp
-            rmtree(temp)
+        handle_iwiacl(temp_folder)
+        handle_requirements(temp_folder,requirements)
+        create_package(temp_folder, archive, package_dir)
 
 
 class DevAppserver(FabengineTask):
