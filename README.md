@@ -116,7 +116,7 @@ fab fabengine.bundle_packages:cobra2_repository=<repository_url>,cobra2_branch=<
 
 The repository url has to be in the form::
 
-    git+ssh://git@github.com/iwi-games/py-cobra2.git
+    git+ssh://git@github.com/<path_to_repository>/<repository>.git
 
 and ssh key has to be present in order to download the repository.
 
