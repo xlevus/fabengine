@@ -12,12 +12,16 @@ __all__ = ['bundle_packages', 'dev_appserver','test','show_config',
     'update_dos', 'update_cron', 'vacuum_indexes']
 
 def find_appengine():
-    import subprocess
-    p = subprocess.Popen(['which','dev_appserver.py'], stdout=subprocess.PIPE)
-    path = p.stdout.read().strip()
-    if os.path.islink(path):
-        path = os.path.realpath(path)
-    return os.path.dirname(path)
+    try:
+        import dev_appserver
+        return os.path.dirname(dev_appserver.__file__)
+    except ImportError:
+        import subprocess
+        p = subprocess.Popen(['which','dev_appserver.py'], stdout=subprocess.PIPE)
+        path = p.stdout.read().strip()
+        if os.path.islink(path):
+            path = os.path.realpath(path)
+        return os.path.dirname(path)
 
 TRUE = ('true','t','y','1')
 ISTRUE = lambda x: str(x).lower() in TRUE
@@ -44,16 +48,22 @@ def config(root, gae_path=None, dev_appserver=None, appcfg=None):
     CONFIG['ROOT'] = os.path.abspath(root)
     CONFIG['GAE_PATH'] = gae_path or find_appengine()
     CONFIG['DEV_APPSERVER'] = dev_appserver or os.path.join(
-            CONFIG['GAE_PATH'], 'old_dev_appserver.py')
+            CONFIG['GAE_PATH'], 'dev_appserver.py')
     CONFIG['APPCFG'] = appcfg or os.path.join(CONFIG['GAE_PATH'], 'appcfg.py')
 
 
 def construct_cmd_params(*args, **kwargs):
     joiner = kwargs.pop('_joiner','=')
 
+    def get_flag(name):
+        if len(name) == 1:
+            return '-'+name
+        else:
+            return '--'+name
+
     params = []
-    params += ['--'+a for a in args]
-    params += ['--%s%s%s' % (k,joiner,v) for k,v in kwargs.iteritems()]
+    params += [get_flag(a) for a in args]
+    params += ['%s%s%s' % (get_flag(k),joiner,v) for k,v in kwargs.iteritems()]
     return params
 
 
@@ -95,6 +105,7 @@ def handle_requirements(temp_folder, requirements):
     args = [
         "pip",
         "install",
+        "-M",
         "-I",
         """--install-option="--install-lib=%s" """ % temp_folder,
         "-r %s" % requirements,

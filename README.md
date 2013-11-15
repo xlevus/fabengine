@@ -22,7 +22,7 @@ Configuration can be done through the fabengine.config function.::
 
   - `root`: The root path of your appengine project. (Required)
   - `gae_path`: The path to your appengine SDK. fabengine will attempt to find this
-    automatically by looking for dev_appserver.py on your `PATH`. (Optional)
+    automatically by `import dev_appserver` looking for dev_appserver.py on your `PATH`. (Optional)
   - `dev_appserver`: The path to `dev_appserver.py`. fabengine will use 
     `<gae_path>/dev_appserver.py` if it is not provided. (Optional)
   - `appcfg`: The path to `appcfg.py`. fabengine will use `<gae_path>/appcfg.py` if it not
@@ -47,11 +47,12 @@ By default, all commands are run from within your projects `root` (as defined by
 Command arguments are forwarded in the following format:
  * Positional arguments become '--VALUE'
  * Keyword arguments become '--KEY=VALUE'
+ * Single-character arguments become -k
 
 e.g.
-    fab fabengine.some_command:foo,bar=baz
+    fab fabengine.some_command:foo,bar=baz,f
 becomes
-    some_command --foo --bar=baz
+    some_command --foo --bar=baz -f
 
 
 `bundle_packages`
@@ -62,6 +63,9 @@ Args:
  * `requirements` - Path of requirements.txt file. Default: requirements.txt
  * `dest` - Destination path of packages folder. Default: `packages`
  * `archive` - Flag to toggle compression of archives. Default: `True`
+
+**Note** Currently this will clobber the packages installed into your virtual environment. You
+will need to reinstall the packages that are bundled by fabengine.
 
 
 `dev_appserver`
