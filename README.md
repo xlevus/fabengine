@@ -7,18 +7,21 @@ Usage
 
         pip install https://github.com/xlevus/fabengine/zipball/master
 
- 2. Create fabfile:
+ 2. Create fabfile & Configure:
 
         import fabengine
+        fabengine.config(root=os.path.join(os.path.dirname(__file__),'my_project'))
+
 
 Configuration
 =============
 
-Configuration can be done through the fabengine.config function.::
+By default, fabengine will use the path to the importable `dev_appserver` as the root location
+to the GAE SDK. You make the SDK work with virtualenvs by running::
 
-    fabengine.config(root=os.path.join(os.path.dirname(__file__),'my_project'))
+    fab fabengine.fix_virtualenv_paths:/path/to/gae/sdk
 
-`fabengine.config` takes three arguments:
+Otherwise, you can further configure fabengine with `fabengine.config`:
 
   - `root`: The root path of your appengine project. (Required)
   - `gae_path`: The path to your appengine SDK. fabengine will attempt to find this
@@ -36,7 +39,6 @@ overridden through the command line.
 
     fabengine.bundle_packages.set_default_args(
         requirements='../requirements.txt', archive=False)
-
 
 
 Commands

@@ -27,17 +27,10 @@ ISTRUE = lambda x: str(x).lower() in TRUE
 CONFIG = {}
 
 GAE_CUSTOMISE = """
-def fix_sys_path():
-    try:
-        import sys, os
-        from dev_appserver import fix_sys_path, DIR_PATH
-        fix_sys_path()
-        # must be after fix_sys_path
-        # uses non-default version of webob
-        webob_path = os.path.join(DIR_PATH, 'lib', 'webob_1_1_1')
-        sys.path = [webob_path] + sys.path
-    except ImportError:
-        pass
+import site
+from dev_appserver import EXTRA_PATHS
+for pth  in EXTRA_PATHS:
+    site.addsitedir(pth)
 """
 
 def config(root, gae_path=None, dev_appserver=None, appcfg=None):
@@ -62,6 +55,7 @@ def construct_cmd_params(*args, **kwargs):
     params += [get_flag(a) for a in args]
     params += ['%s%s%s' % (get_flag(k),joiner,v) for k,v in kwargs.iteritems()]
     return params
+
 
 
 class FabengineTask(Task):
@@ -197,27 +191,27 @@ class FixVirtualenvPaths(FabengineTask):
     """
     Applies some permanent path manipulation to make the virtualenv use appengine's paths.
 
-    See:
-    https://schettino72.wordpress.com/2010/11/21/appengine-virtualenv/
+    :param path: Path to google appengine.
     """
     name = 'fix_virtualenv_paths'
 
-    def run_fabengine(self):
+    def run_fabengine(self, path=None):
         import sys
+        path = os.path.abspath(path or CONFIG['GAE_PATH'])
 
         env = os.environ.get('VIRTUAL_ENV')
         assert env
 
-        for path in sys.path[::-1]:
-            if path.startswith(env) and path.endswith('site-packages'):
+        for pth in sys.path[::-1]:
+            if pth.startswith(env) and pth.endswith('site-packages'):
                 break
 
-        with open(os.path.join(path, 'gaecustomise.py'),'w') as gaecustom:
+        with open(os.path.join(pth, 'gaecustomise.py'),'w') as gaecustom:
             gaecustom.write(GAE_CUSTOMISE)
 
-        with open(os.path.join(path, 'gae.pth'), 'w') as gaepth:
-            gaepth.write(CONFIG['GAE_PATH'])
-            gaepth.write("\nimport gaecustomise; gaecustomise.fix_sys_path()")
+        with open(os.path.join(pth, 'gae.pth'), 'w') as gaepth:
+            gaepth.write(path)
+            gaepth.write("\nimport gaecustomise")
 
 
 class AppCFGTask(FabengineTask):
