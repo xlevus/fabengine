@@ -198,6 +198,7 @@ class FixVirtualenvPaths(FabengineTask):
     def run_fabengine(self, path=None):
         import sys
         path = os.path.abspath(path or CONFIG['GAE_PATH'])
+        print "Using sdk found in '%s'" % path
 
         env = os.environ.get('VIRTUAL_ENV')
         assert env
