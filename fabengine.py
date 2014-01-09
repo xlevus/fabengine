@@ -1,6 +1,7 @@
 import os
 import tempfile
 from shutil import rmtree
+import contextlib
 
 from fabric.api import local, settings, hide, lcd
 from fabric.tasks import Task
@@ -61,6 +62,7 @@ def construct_cmd_params(*args, **kwargs):
 class FabengineTask(Task):
     def __init__(self, *args, **kwargs):
         self.default_arguments = ([],{})
+        self.context_managers = []
         super(FabengineTask, self).__init__(*args, **kwargs)
 
     def set_default_args(self, *args, **kwargs):
@@ -74,10 +76,19 @@ class FabengineTask(Task):
 
             kwargs = self.default_arguments[1].copy()
             kwargs.update(n_kwargs)
-            return self.run_fabengine(*list(args), **kwargs)
+            with self._context_managers(*n_args, **n_kwargs):
+                return self.run_fabengine(*list(args), **kwargs)
 
     def run_fabengine(self):
         raise NotImplementedError
+
+    def _context_managers(self, *args, **kwargs):
+        mgrs = []
+        for mgr in self.context_managers:
+            if callable(mgr):
+                mgr = mgr(*args, **kwargs)
+            mgrs.append(mgr)
+        return contextlib.nested(*mgrs)
 
 
 class ShowConfig(FabengineTask):

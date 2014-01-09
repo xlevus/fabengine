@@ -41,6 +41,29 @@ overridden through the command line.
         requirements='../requirements.txt', archive=False)
 
 
+Pre and Post execution
+----------------------
+In some cases, you may want to run code before or after command execution. This can be achieved
+by adding context managers to `fabengine.COMMAND.context_managers`. e.g. ::
+
+    class DisabledProductionTask(object):
+        """Prevent a task from running when the application is 'production'."""
+        def __init__(self, *args, **kwargs):
+            self.application = kwargs.get('application')
+
+        def __enter__(self):
+            if self.application == 'production':
+                raise Exception("I'm sorry, Dave. I'm afraid I can't do that.")
+
+        def __exit__(self, *args):
+            print "Finished"
+
+     fabengine.update.context_managers.append(DisabledTask)
+
+If the object in the array is callable, it will be called with the args and kwargs from
+the command line.
+
+
 Commands
 ========
 
