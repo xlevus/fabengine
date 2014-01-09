@@ -95,7 +95,7 @@ class ShowConfig(FabengineTask):
     """Shows Fabengine's config"""
     name = 'show_config'
 
-    def fabengine_run(self):
+    def run_fabengine(self):
         for x in CONFIG.iteritems():
             print "%s: %s" % x
 
