@@ -34,8 +34,10 @@ for pth  in EXTRA_PATHS:
     site.addsitedir(pth)
 """
 
-def config(root, gae_path=None, dev_appserver=None, appcfg=None):
+def config(root, modules=None, gae_path=None, dev_appserver=None, appcfg=None):
     global CONFIG
+
+    CONFIG['MODULES'] = modules or ['app.yaml']
     CONFIG['ROOT'] = os.path.abspath(root)
     CONFIG['GAE_PATH'] = gae_path or find_appengine()
     CONFIG['DEV_APPSERVER'] = dev_appserver or os.path.join(
@@ -164,7 +166,7 @@ class DevAppserver(FabengineTask):
     def run_fabengine(self, *args, **kwargs):
         cmd = [CONFIG['DEV_APPSERVER']]
         cmd.extend(construct_cmd_params(*args, **kwargs))
-        cmd.append(CONFIG['ROOT'])
+        cmd.extend(CONFIG['MODULES'])
         local(" ".join(cmd))
 
 
@@ -230,10 +232,18 @@ class AppCFGTask(FabengineTask):
     """Base task for appcfg.py commands."""
 
     name = None
+    use_modules = False
 
     def get_cmd(self, *args, **kwargs):
-        cmd_args = [CONFIG['APPCFG'], self.name, CONFIG['ROOT']]
+        cmd_args = [CONFIG['APPCFG'], self.name]
+
+
         cmd_args.extend(construct_cmd_params(*args, **kwargs))
+
+        if self.use_modules:
+            cmd_args.extend(CONFIG['MODULES'])
+        else:
+            cmd_args.append(CONFIG['ROOT'])
 
         return cmd_args
 
@@ -244,6 +254,7 @@ class AppCFGTask(FabengineTask):
 class Update(AppCFGTask):
     """Upload code to appengine"""
     name = 'update'
+    use_modules = True
 
 
 class UpdateIndexes(AppCFGTask):
