@@ -282,6 +282,11 @@ class UpdateCron(AppCFGTask):
     name = 'update_cron'
 
 
+class UpdateDispatch(AppCFGTask):
+    """Update modules dispatch"""
+    name = 'update_dispatch'
+
+
 show_config = ShowConfig()
 bundle_packages = BundlePackages()
 dev_appserver = DevAppserver()
