@@ -298,4 +298,5 @@ update_queues = UpdateQueues()
 vacuum_indexes = VacuumIndexes()
 update_dos = UpdateDoS()
 update_cron = UpdateCron()
+update_dispatch = UpdateDispatch()
 
