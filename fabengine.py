@@ -1,14 +1,15 @@
 import os
 import tempfile
 from shutil import rmtree
+from functools import partial
 import contextlib
 
-from fabric.api import local, settings, hide, lcd
+from fabric.api import local, settings, hide, lcd, execute
 from fabric.tasks import Task
 
 __all__ = ['bundle_packages', 'dev_appserver','test','show_config',
     'fix_virtualenv_paths', 'update', 'update_indexes', 'update_queues',
-    'update_dos', 'update_cron', 'vacuum_indexes']
+    'update_dos', 'update_cron', 'vacuum_indexes', 'update_dispatch']
 
 def find_appengine():
     try:
@@ -61,6 +62,41 @@ def construct_cmd_params(*args, **kwargs):
 
 
 
+class Before(object):
+    """
+    Context manager to facilitate running a command before another.
+
+    All arguments from the main command are forwarded to the pre-runner.
+    """
+
+    @classmethod
+    def create(cls, command):
+        return partial(cls, command)
+
+    def __init__(self, command, *args, **kwargs):
+        self.command = command
+        self.args = args
+        self.kwargs = kwargs
+
+    def __enter__(self):
+        execute(self.command, *self.args, **self.kwargs)
+
+
+class After(Before):
+    """
+    Context manager to facilitate running a command after another.
+
+    All arguments from the main command are forwarded to the post-runner.
+    """
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        if value is None:
+            execute(self.command, *self.args, **self.kwargs)
+
+
 class FabengineTask(Task):
     def __init__(self, *args, **kwargs):
         self.default_arguments = ([],{})
@@ -91,6 +127,14 @@ class FabengineTask(Task):
                 mgr = mgr(*args, **kwargs)
             mgrs.append(mgr)
         return contextlib.nested(*mgrs)
+
+    def run_before(self):
+        """Run command before another command"""
+        return Before.create(self)
+
+    def run_after(self):
+        """Run command after another command"""
+        return After.create(self)
 
 
 class ShowConfig(FabengineTask):
