@@ -296,10 +296,9 @@ class AppCFGTask(FabengineTask):
 
         cmd_args.extend(construct_cmd_params(*args, **kwargs))
 
+        cmd_args.append(CONFIG['ROOT'])
         if self.use_modules:
             cmd_args.extend(CONFIG['MODULES'])
-        else:
-            cmd_args.append(CONFIG['ROOT'])
 
         return cmd_args
 
