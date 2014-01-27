@@ -61,6 +61,18 @@ def construct_cmd_params(*args, **kwargs):
     return params
 
 
+def get_module_names():
+    """
+    Get the names of the modules.
+    """
+    import yaml
+    modules = set()
+    for module_file in CONFIG['MODULES']:
+        with open(module_file) as f:
+            d = yaml.load(f)
+            modules.add(d.get('module', 'default'))
+    return modules
+
 
 class Before(object):
     """
