@@ -331,6 +331,15 @@ class UpdateDispatch(AppCFGTask):
     name = 'update_dispatch'
 
 
+class DeleteVersion(AppCFGTask):
+    """Delete version"""
+    name = "delete_version"
+
+class SetDefaultVersion(AppCFGTask):
+    """Set Default Version"""
+    name = "set_default_version"
+
+
 show_config = ShowConfig()
 bundle_packages = BundlePackages()
 dev_appserver = DevAppserver()
@@ -343,4 +352,6 @@ vacuum_indexes = VacuumIndexes()
 update_dos = UpdateDoS()
 update_cron = UpdateCron()
 update_dispatch = UpdateDispatch()
+delete_version = DeleteVersion()
+set_default_version = SetDefaultVersion()
 
