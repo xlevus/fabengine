@@ -1,6 +1,6 @@
 import os
 import tempfile
-from shutil import rmtree
+import shutil
 from functools import partial
 import contextlib
 
@@ -60,6 +60,18 @@ def construct_cmd_params(*args, **kwargs):
     params += ['%s%s%s' % (get_flag(k),joiner,v) for k,v in kwargs.iteritems()]
     return params
 
+
+def get_module_names():
+    """
+    Get the names of the modules.
+    """
+    import yaml
+    modules = set()
+    for module_file in CONFIG['MODULES']:
+        with open(module_file) as f:
+            d = yaml.load(f)
+            modules.add(d.get('module', 'default'))
+    return modules
 
 
 class Before(object):
@@ -160,11 +172,11 @@ class BundlePackages(FabengineTask):
         package_dir_path = os.path.join(os.path.dirname(__file__), package_dir)
 
         for filename in os.listdir(package_dir_path):
-            if filename.endswith('.pth'):
-                pth_file = os.path.join(package_dir_path, filename)
-                with open(pth_file, 'r') as f:
-                    package_path = os.path.join(package_dir_path, f.read().strip())
-                    sys.path.insert(0, package_path)
+            filename = os.path.join(package_dir_path, filename)
+            if filename.endswith('.whl'):
+                sys.path.insert(0, filename)
+            elif os.isdir(filename):
+                sys.path.insert(0, filename)
         sys.path.insert(0, package_dir_path)
     """
     name= 'bundle_packages'
@@ -173,31 +185,45 @@ class BundlePackages(FabengineTask):
             archive='True'):
 
         temp = tempfile.mkdtemp(prefix="fabengine")
+
         try:
-            self.package_dir = os.path.join(CONFIG['ROOT'], dest)
-            if not os.path.exists(self.package_dir):
-                os.makedirs(self.package_dir)
+            package_dir = os.path.join(CONFIG['ROOT'], dest)
+            if not os.path.exists(package_dir):
+                os.makedirs(package_dir)
 
-            args = [
-                "pip",
-                "install",
-                "-I",
-                """--install-option="--install-lib=%s" """ % temp,
-                "-r %s" % requirements,
-            ]
+            local("pip wheel --use-wheel -w %(dest)s -f %(dest)s --download-cache %(cache)s -r %(req)s " % {
+                'dest': package_dir,
+                'cache': temp,
+                'req': requirements,
+            })
 
-            local(" ".join(args))
+            for whl in os.listdir(temp):
+                if not whl.endswith('.whl'):
+                    continue
+                _, tgt_whl = whl.rsplit("%2F",1)
+                shutil.move(
+                    os.path.join(temp, whl),
+                    os.path.join(package_dir, tgt_whl)
+                )
 
-            with lcd(temp):
-                if ISTRUE(archive):
-                    local("zip -r0 %s ." % os.path.join(
-                        self.package_dir,"fabengine_bundle.zip"))
-                else:
-                    local("cp -a * %s" % self.package_dir)
+            if not archive:
+                self.unpack(package_dir)
 
         finally:
-            print "Cleaning up temp dir '%s'" % temp
-            rmtree(temp)
+            shutil.rmtree(temp)
+
+    def unpack(self, package_dir):
+        for whl in os.listdir(package_dir):
+            if not whl.endswith('.whl'):
+                continue
+
+            whl = os.path.join(package_dir, whl)
+
+            local("unzip -d %(dest)s %(whl)s" % {
+                'dest': package_dir,
+                'whl': whl,
+            })
+            os.unlink(whl)
 
 
 class DevAppserver(FabengineTask):
@@ -331,6 +357,15 @@ class UpdateDispatch(AppCFGTask):
     name = 'update_dispatch'
 
 
+class DeleteVersion(AppCFGTask):
+    """Delete version"""
+    name = "delete_version"
+
+class SetDefaultVersion(AppCFGTask):
+    """Set Default Version"""
+    name = "set_default_version"
+
+
 show_config = ShowConfig()
 bundle_packages = BundlePackages()
 dev_appserver = DevAppserver()
@@ -343,4 +378,6 @@ vacuum_indexes = VacuumIndexes()
 update_dos = UpdateDoS()
 update_cron = UpdateCron()
 update_dispatch = UpdateDispatch()
+delete_version = DeleteVersion()
+set_default_version = SetDefaultVersion()
 
