@@ -164,25 +164,23 @@ class BundlePackages(FabengineTask):
 
     Takes two arguments. The name of the pip-requirements file (default:
     requirements.txt), and the destination package folder (default: packages).
-
-    Packages can then be loaded with the following snippet:
-
-        import sys, os
-        package_dir = "packages"
-        package_dir_path = os.path.join(os.path.dirname(__file__), package_dir)
-
-        for filename in os.listdir(package_dir_path):
-            filename = os.path.join(package_dir_path, filename)
-            if filename.endswith('.whl'):
-                sys.path.insert(0, filename)
-            elif os.isdir(filename):
-                sys.path.insert(0, filename)
-        sys.path.insert(0, package_dir_path)
+    """
+    # Indent for readability, write def and call around w/o indent
+    LOADER = """
+    import sys, os
+    package_dir = "%(package_dir)s"
+    package_dir_path = os.path.abspath(os.path.join(os.path.dirname(__file__), package_dir))
+    packages = sorted(os.listdir(package_dir_path), key=lambda x:x.lower(), reverse=True)
+    for filename in packages:
+        filename = os.path.join(package_dir_path, filename)
+        if filename.endswith('.whl') or os.path.isdir(filename):
+            sys.path.insert(0, filename)
+    sys.path.insert(0, package_dir_path)
     """
     name= 'bundle_packages'
 
     def run_fabengine(self, requirements='requirements.txt', dest='packages',
-            archive='True'):
+            archive='True', install_loader='False'):
 
         temp = tempfile.mkdtemp(prefix="fabengine")
 
@@ -197,6 +195,7 @@ class BundlePackages(FabengineTask):
                 'req': requirements,
             })
 
+            # Copy downloaded wheels into the package directory
             for whl in os.listdir(temp):
                 if not whl.endswith('.whl'):
                     continue
@@ -206,8 +205,11 @@ class BundlePackages(FabengineTask):
                     os.path.join(package_dir, tgt_whl)
                 )
 
-            if not archive:
+            if not ISTRUE(archive):
                 self.unpack(package_dir)
+
+            if ISTRUE(install_loader):
+                self.install(dest)
 
         finally:
             shutil.rmtree(temp)
@@ -224,6 +226,15 @@ class BundlePackages(FabengineTask):
                 'whl': whl,
             })
             os.unlink(whl)
+
+    def install(self, package_dir):
+        pth = os.path.join(CONFIG['ROOT'], 'appengine_config.py')
+        with open(pth, 'a') as f:
+            f.write('\n\n#FABENGINE PKG LOADER\ndef _gae_pkg_loader():')
+            f.write(self.LOADER % {'package_dir':package_dir})
+            f.write('\n_gae_pkg_loader()')
+
+        print "Appended package loader to appengine_config.py. Please check it."
 
 
 class DevAppserver(FabengineTask):
