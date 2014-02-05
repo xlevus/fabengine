@@ -1,3 +1,4 @@
+import sys
 import os
 import tempfile
 import shutil
@@ -278,7 +279,9 @@ class Test(FabengineTask):
 
         with settings(warn_only=True):
             with hide('warnings'):
-                local(" ".join(cmd))
+                result = local(" ".join(cmd))
+                if result.return_code != 0:
+                    sys.exit(result.return_code)
 
 
 class FixVirtualenvPaths(FabengineTask):
