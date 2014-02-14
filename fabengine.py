@@ -1,3 +1,4 @@
+import re
 import sys
 import os
 import tempfile
@@ -10,7 +11,8 @@ from fabric.tasks import Task
 
 __all__ = ['bundle_packages', 'dev_appserver','test','show_config',
     'fix_virtualenv_paths', 'update', 'update_indexes', 'update_queues',
-    'update_dos', 'update_cron', 'vacuum_indexes', 'update_dispatch']
+    'update_dos', 'update_cron', 'vacuum_indexes', 'update_dispatch',
+    'delete_version', 'list_versions']
 
 def find_appengine():
     try:
@@ -379,6 +381,33 @@ class SetDefaultVersion(AppCFGTask):
     """Set Default Version"""
     name = "set_default_version"
 
+class ListVersions(AppCFGTask):
+    name = "list_versions"
+
+    mod_re = re.compile(r"(?P<module>[\w\d-]+): \[(?P<versions>.*?)]")
+    ver_re = re.compile(r"(?P<version>[\w\d-]+)(, )?")
+
+    def run_fabengine(self, *args, **kwargs):
+        kwargs['_capture'] = False
+        print self.get_versions(*args, **kwargs)
+
+    def get_versions(self, *args, **kwargs):
+        capture = kwargs.pop('_capture', True)
+        capture = True
+        result = local(" ".join(self.get_cmd(*args, **kwargs)), capture=capture)
+        if not capture:
+            return
+
+        output = {}
+        for m_match in self.mod_re.finditer(result.replace('\n','')):
+            module = m_match.groupdict()['module']
+            versions = []
+            for v_match in self.ver_re.finditer(m_match.groupdict()['versions']):
+                versions.append(v_match.groupdict()['version'])
+            output[module] = sorted(versions)
+
+        return output
+
 
 show_config = ShowConfig()
 bundle_packages = BundlePackages()
@@ -394,4 +423,5 @@ update_cron = UpdateCron()
 update_dispatch = UpdateDispatch()
 delete_version = DeleteVersion()
 set_default_version = SetDefaultVersion()
+list_versions = ListVersions()
 
