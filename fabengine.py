@@ -393,7 +393,6 @@ class ListVersions(AppCFGTask):
 
     def get_versions(self, *args, **kwargs):
         capture = kwargs.pop('_capture', True)
-        capture = True
         result = local(" ".join(self.get_cmd(*args, **kwargs)), capture=capture)
         if not capture:
             return
