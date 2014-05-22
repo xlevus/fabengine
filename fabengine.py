@@ -54,13 +54,13 @@ def construct_cmd_params(*args, **kwargs):
 
     def get_flag(name):
         if len(name) == 1:
-            return '-'+name
+            return '-%s ' % name
         else:
-            return '--'+name
+            return '--%s%s' % (name, joiner)
 
     params = []
     params += [get_flag(a) for a in args]
-    params += ['%s%s%s' % (get_flag(k),joiner,v) for k,v in kwargs.iteritems()]
+    params += ['%s%s' % (get_flag(k),v) for k,v in kwargs.iteritems()]
     return params
 
 
@@ -393,7 +393,13 @@ class ListVersions(AppCFGTask):
 
     def get_versions(self, *args, **kwargs):
         capture = kwargs.pop('_capture', True)
-        result = local(" ".join(self.get_cmd(*args, **kwargs)), capture=capture)
+
+        args = self.get_cmd(*args, **kwargs)
+        if 'A' or 'application' in kwargs:
+            args = args[:-1]  # Pop off the path as it's not needed when
+                              # explicitly setting the
+
+        result = local(" ".join(args), capture=capture)
         if not capture:
             return
 
