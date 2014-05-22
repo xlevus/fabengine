@@ -54,13 +54,13 @@ def construct_cmd_params(*args, **kwargs):
 
     def get_flag(name):
         if len(name) == 1:
-            return '-%s ' % name
+            return ('-'+name, ' ')
         else:
-            return '--%s%s' % (name, joiner)
+            return ('--'+name, joiner)
 
     params = []
-    params += [get_flag(a) for a in args]
-    params += ['%s%s' % (get_flag(k),v) for k,v in kwargs.iteritems()]
+    params += [get_flag(a)[0] for a in args]
+    params += ['%s%s%s' % (get_flag(k),j,v) for k,(v,j) in kwargs.iteritems()]
     return params
 
 
