@@ -60,7 +60,7 @@ def construct_cmd_params(*args, **kwargs):
 
     params = []
     params += [get_flag(a)[0] for a in args]
-    params += ['%s%s%s' % (get_flag(k),j,v) for k,(v,j) in kwargs.iteritems()]
+    params += ['%s%s%s' % (get_flag(k)+(v,)) for k,v in kwargs.iteritems()]
     return params
 
 
