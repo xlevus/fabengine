@@ -1,14 +1,18 @@
+import re
+import sys
 import os
 import tempfile
-from shutil import rmtree
+import shutil
+from functools import partial
 import contextlib
 
-from fabric.api import local, settings, hide, lcd
+from fabric.api import local, settings, hide, lcd, execute
 from fabric.tasks import Task
 
 __all__ = ['bundle_packages', 'dev_appserver','test','show_config',
     'fix_virtualenv_paths', 'update', 'update_indexes', 'update_queues',
-    'update_dos', 'update_cron', 'vacuum_indexes']
+    'update_dos', 'update_cron', 'vacuum_indexes', 'update_dispatch',
+    'delete_version', 'list_versions']
 
 def find_appengine():
     try:
@@ -34,8 +38,10 @@ for pth  in EXTRA_PATHS:
     site.addsitedir(pth)
 """
 
-def config(root, gae_path=None, dev_appserver=None, appcfg=None):
+def config(root, modules=None, gae_path=None, dev_appserver=None, appcfg=None):
     global CONFIG
+
+    CONFIG['MODULES'] = modules or ['app.yaml']
     CONFIG['ROOT'] = os.path.abspath(root)
     CONFIG['GAE_PATH'] = gae_path or find_appengine()
     CONFIG['DEV_APPSERVER'] = dev_appserver or os.path.join(
@@ -48,13 +54,13 @@ def construct_cmd_params(*args, **kwargs):
 
     def get_flag(name):
         if len(name) == 1:
-            return '-'+name
+            return ('-'+name, ' ')
         else:
-            return '--'+name
+            return ('--'+name, joiner)
 
     params = []
-    params += [get_flag(a) for a in args]
-    params += ['%s%s%s' % (get_flag(k),joiner,v) for k,v in kwargs.iteritems()]
+    params += [get_flag(a)[0] for a in args]
+    params += ['%s%s%s' % (get_flag(k)+(v,)) for k,v in kwargs.iteritems()]
     return params
 
 
@@ -64,12 +70,47 @@ def get_module_names():
     """
     import yaml
     modules = set()
-    for module_file in CONFIG.get('MODULES', ['app.yaml']):
+    for module_file in CONFIG['MODULES']:
+
         with open(module_file) as f:
             d = yaml.load(f)
             modules.add(d.get('module', 'default'))
     return modules
 
+
+class Before(object):
+    """
+    Context manager to facilitate running a command before another.
+
+    All arguments from the main command are forwarded to the pre-runner.
+    """
+
+    @classmethod
+    def create(cls, command):
+        return partial(cls, command)
+
+    def __init__(self, command, *args, **kwargs):
+        self.command = command
+        self.args = args
+        self.kwargs = kwargs
+
+    def __enter__(self):
+        execute(self.command, *self.args, **self.kwargs)
+
+
+class After(Before):
+    """
+    Context manager to facilitate running a command after another.
+
+    All arguments from the main command are forwarded to the post-runner.
+    """
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, type, value, traceback):
+        if value is None:
+            execute(self.command, *self.args, **self.kwargs)
 
 
 class FabengineTask(Task):
@@ -103,6 +144,14 @@ class FabengineTask(Task):
             mgrs.append(mgr)
         return contextlib.nested(*mgrs)
 
+    def run_before(self):
+        """Run command before another command"""
+        return Before.create(self)
+
+    def run_after(self):
+        """Run command after another command"""
+        return After.create(self)
+
 
 class ShowConfig(FabengineTask):
     """Shows Fabengine's config"""
@@ -119,52 +168,77 @@ class BundlePackages(FabengineTask):
 
     Takes two arguments. The name of the pip-requirements file (default:
     requirements.txt), and the destination package folder (default: packages).
-
-    Packages can then be loaded with the following snippet:
-
-        import sys, os
-        package_dir = "packages"
-        package_dir_path = os.path.join(os.path.dirname(__file__), package_dir)
-
-        for filename in os.listdir(package_dir_path):
-            if filename.endswith('.pth'):
-                pth_file = os.path.join(package_dir_path, filename)
-                with open(pth_file, 'r') as f:
-                    package_path = os.path.join(package_dir_path, f.read().strip())
-                    sys.path.insert(0, package_path)
-        sys.path.insert(0, package_dir_path)
+    """
+    # Indent for readability, write def and call around w/o indent
+    LOADER = """
+    import sys, os
+    package_dir = "%(package_dir)s"
+    package_dir_path = os.path.abspath(os.path.join(os.path.dirname(__file__), package_dir))
+    packages = sorted(os.listdir(package_dir_path), key=lambda x:x.lower(), reverse=True)
+    for filename in packages:
+        filename = os.path.join(package_dir_path, filename)
+        if filename.endswith('.whl') or os.path.isdir(filename):
+            sys.path.insert(0, filename)
+    sys.path.insert(0, package_dir_path)
     """
     name= 'bundle_packages'
 
     def run_fabengine(self, requirements='requirements.txt', dest='packages',
-            archive='True'):
+            archive='True', install_loader='False'):
 
         temp = tempfile.mkdtemp(prefix="fabengine")
+
         try:
-            self.package_dir = os.path.join(CONFIG['ROOT'], dest)
-            if not os.path.exists(self.package_dir):
-                os.makedirs(self.package_dir)
+            package_dir = os.path.join(CONFIG['ROOT'], dest)
+            if not os.path.exists(package_dir):
+                os.makedirs(package_dir)
 
-            args = [
-                "pip",
-                "install",
-                "-I",
-                """--install-option="--install-lib=%s" """ % temp,
-                "-r %s" % requirements,
-            ]
+            local("pip wheel --use-wheel -w %(dest)s -f %(dest)s --download-cache %(cache)s -r %(req)s " % {
+                'dest': package_dir,
+                'cache': temp,
+                'req': requirements,
+            })
 
-            local(" ".join(args))
+            # Copy downloaded wheels into the package directory
+            for whl in os.listdir(temp):
+                if not whl.endswith('.whl'):
+                    continue
+                _, tgt_whl = whl.rsplit("%2F",1)
+                shutil.move(
+                    os.path.join(temp, whl),
+                    os.path.join(package_dir, tgt_whl)
+                )
 
-            with lcd(temp):
-                if ISTRUE(archive):
-                    local("zip -r0 %s ." % os.path.join(
-                        self.package_dir,"fabengine_bundle.zip"))
-                else:
-                    local("cp -a * %s" % self.package_dir)
+            if not ISTRUE(archive):
+                self.unpack(package_dir)
+
+            if ISTRUE(install_loader):
+                self.install(dest)
 
         finally:
-            print "Cleaning up temp dir '%s'" % temp
-            rmtree(temp)
+            shutil.rmtree(temp)
+
+    def unpack(self, package_dir):
+        for whl in os.listdir(package_dir):
+            if not whl.endswith('.whl'):
+                continue
+
+            whl = os.path.join(package_dir, whl)
+
+            local("unzip -d %(dest)s %(whl)s" % {
+                'dest': package_dir,
+                'whl': whl,
+            })
+            os.unlink(whl)
+
+    def install(self, package_dir):
+        pth = os.path.join(CONFIG['ROOT'], 'appengine_config.py')
+        with open(pth, 'a') as f:
+            f.write('\n\n#FABENGINE PKG LOADER\ndef _gae_pkg_loader():')
+            f.write(self.LOADER % {'package_dir':package_dir})
+            f.write('\n_gae_pkg_loader()')
+
+        print "Appended package loader to appengine_config.py. Please check it."
 
 
 class DevAppserver(FabengineTask):
@@ -177,7 +251,7 @@ class DevAppserver(FabengineTask):
     def run_fabengine(self, *args, **kwargs):
         cmd = [CONFIG['DEV_APPSERVER']]
         cmd.extend(construct_cmd_params(*args, **kwargs))
-        cmd.append(CONFIG['ROOT'])
+        cmd.extend(CONFIG['MODULES'])
         local(" ".join(cmd))
 
 
@@ -208,7 +282,9 @@ class Test(FabengineTask):
 
         with settings(warn_only=True):
             with hide('warnings'):
-                local(" ".join(cmd))
+                result = local(" ".join(cmd))
+                if result.return_code != 0:
+                    sys.exit(result.return_code)
 
 
 class FixVirtualenvPaths(FabengineTask):
@@ -243,10 +319,18 @@ class AppCFGTask(FabengineTask):
     """Base task for appcfg.py commands."""
 
     name = None
+    use_modules = False
 
     def get_cmd(self, *args, **kwargs):
-        cmd_args = [CONFIG['APPCFG'], self.name, CONFIG['ROOT']]
+        cmd_args = [CONFIG['APPCFG'], self.name]
+
+
         cmd_args.extend(construct_cmd_params(*args, **kwargs))
+
+        if self.use_modules:
+            cmd_args.extend(CONFIG['MODULES'])
+        else:
+            cmd_args.append(CONFIG['ROOT'])
 
         return cmd_args
 
@@ -257,6 +341,7 @@ class AppCFGTask(FabengineTask):
 class Update(AppCFGTask):
     """Upload code to appengine"""
     name = 'update'
+    use_modules = True
 
 
 class UpdateIndexes(AppCFGTask):
@@ -298,6 +383,38 @@ class SetDefaultVersion(AppCFGTask):
     name = "set_default_version"
 
 
+class ListVersions(AppCFGTask):
+    name = "list_versions"
+
+    mod_re = re.compile(r"(?P<module>[\w\d-]+): \[(?P<versions>.*?)]")
+    ver_re = re.compile(r"(?P<version>[\w\d-]+)(, )?")
+
+    def run_fabengine(self, *args, **kwargs):
+        kwargs['_capture'] = False
+        print self.get_versions(*args, **kwargs)
+
+    def get_versions(self, *args, **kwargs):
+        capture = kwargs.pop('_capture', True)
+
+        args = self.get_cmd(*args, **kwargs)
+        if 'A' or 'application' in kwargs:
+            args = args[:-1]  # Pop off the path as it's not needed when
+                              # explicitly setting the
+
+        result = local(" ".join(args), capture=capture)
+        if not capture:
+            return
+
+        output = {}
+        for m_match in self.mod_re.finditer(result.replace('\n','')):
+            module = m_match.groupdict()['module']
+            versions = []
+            for v_match in self.ver_re.finditer(m_match.groupdict()['versions']):
+                versions.append(v_match.groupdict()['version'])
+            output[module] = sorted(versions)
+
+        return output
+
 
 show_config = ShowConfig()
 bundle_packages = BundlePackages()
@@ -313,4 +430,5 @@ update_cron = UpdateCron()
 update_dispatch = UpdateDispatch()
 delete_version = DeleteVersion()
 set_default_version = SetDefaultVersion()
+list_versions = ListVersions()
 
