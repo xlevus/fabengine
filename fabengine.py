@@ -72,7 +72,7 @@ def get_module_names():
     modules = set()
     for module_file in CONFIG['MODULES']:
 
-        with open(module_file) as f:
+        with open(os.path.join(CONFIG["ROOT"], module_file)) as f:
             d = yaml.load(f)
             modules.add(d.get('module', 'default'))
     return modules
